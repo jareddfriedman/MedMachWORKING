@@ -1,0 +1,253 @@
+var serial;       
+var portName = 'COM3'; 
+var dataX = 0;
+var dataY = 0;
+var dataZ = 0;
+var dataP = 0;
+var dataFSR = 0;
+
+var fourNoise = [0, 0, 0, 0];
+
+var noise1 = 125; // alpha for shape 1
+var noise2 = 0; // noise for shape of shape 1
+
+var shapeState = 1;
+
+var nCount = 0;
+var nCount2 = 0;
+
+var bMin = 20000; //breath incorporates only Z axis data now - mess with numbers to change, obvs.
+
+var bMax = 0;
+
+var bAct = 0;
+
+var r1 = 0;
+var r2 = 0;
+var r1plus = 0;
+
+var breathCheck = [];
+
+var br; // mapped value for shape size
+var br5 = [];
+var newBr;
+var bRef;
+
+var bt = 0;
+var updown = 1;
+
+var fb = 0;
+var fbn = 1;
+
+var bCount;
+
+var test1;
+
+  var rCheck = 0;
+
+
+ 
+function setup() {
+ createCanvas(640, 480);          // make canvas
+ smooth();                        // antialias drawing lines
+ serial = new p5.SerialPort();    // make a new instance of the serialport library
+ serial.on('list', printList);    // set a callback function for the serialport list event
+ serial.on('connected', serverConnected); // callback for connecting to the server
+ serial.on('open', portOpen);     // callback for the port opening
+ serial.on('data', serialEvent);  // callback for when new data arrives
+ serial.on('error', serialError); // callback for errors
+ serial.on('close', portClose);   // callback for the port closing
+ 
+ serial.list();                   // list the serial ports
+ serial.open(portName);           // open a serial port
+}
+function draw() {
+  background(125);
+  runShapes();
+}
+
+function runShapes() {
+
+  if (shapeState == 1) {
+    
+    drawOneShape(width/2, height/2);
+  
+  }
+  
+}
+
+function drawOneShape(x1x, y1y) {
+  bRef = bAct;
+  
+  var pq = 0;
+  if (dataP > 50) {pq = 50;}
+  else {pq = dataP;}
+  
+  noise1 = map(pq, 0, 50, 125, 225);
+    
+  breathWork();
+  
+  getNoise2();
+ 
+  getr1();
+  
+  push();
+  
+  br5.push(bAct);
+  
+  if (br5.length >= 4){
+    br5.splice(0, 1);
+  }
+  
+  var brTot = 0;
+  
+  for (var i = 0; i < br5.length; i++) {
+    brTot += br5[i];
+  }
+  
+  bAct = int(brTot / 3);
+  
+  br = int(map(bAct, bMin, bMax, 75, 125));
+  
+  fill(255, 255, 255, noise1);
+  noStroke();
+  translate(x1x, y1y);
+  rotate(r1);
+  
+  quad(-br - fourNoise[0], -br - fourNoise[0], br + fourNoise[1], -br - fourNoise[1], br + fourNoise[2], br + fourNoise[2], -br - fourNoise[3], br + fourNoise[3]);
+
+  pop();
+}
+
+function getr1() {
+rCheck = 0;
+  if (dataFSR < 400) {rCheck = 0;}
+  else if (dataFSR > 800) {rCheck = 800;}
+  else {rCheck = dataFSR;} 
+  
+  if (r1 < TWO_PI) {
+    r1 += map(rCheck, 0, 800, 0, .01);
+  } else {
+    if (rCheck < 100) {r1plus -= .001;}
+    r1plus += map(rCheck, 0, 800, 0, .001);
+    r1 += r1plus;
+    
+  }
+}
+
+function breathWork() {
+  
+  var bTemp = [];
+  
+ // fakeBreath();
+ 
+  bAct = (dataX + dataY + dataZ) / 3;
+  
+  var bPct = bAct / 50;
+  
+  breathCheck.push(bAct);
+  
+  if (breathCheck.length >= 100){
+    breathCheck.splice(0, 1);
+  }
+
+for (var i = 0; i < breathCheck.length; i++) {
+  if (breathCheck[i] < bMin + bPct) {
+    bMin = breathCheck[i];
+    bCount = 0;
+  }
+  if (breathCheck[i] > bMax - bPct) {
+    bMax = breathCheck[i];
+    bCount = 0;
+  }
+}
+
+if (bCount >= 180) {
+  bTemp = sort(breathCheck);
+  bMin = bTemp[0];
+  bMax = bTemp[bTemp.length - 1];
+  bCount = 0;
+}
+
+  bCount++;
+
+}
+
+function breathTime() {
+  if (bAct > bMin && updown === 1) {
+    
+  }
+}
+
+function fakeBreath() {
+  fb += fbn;
+  if (fb >= 30 || fb <= 0) {
+    fbn = fbn * -1;
+  }
+}
+
+function getNoise2() {
+  var pp = 0;
+  if (dataP > 50) {
+    pp = 50;
+  } else {pp = dataP;}
+  
+  var noise2 = map(pp, 0, 50, 0, 15);
+  
+  if (nCount >= 7) {nCount = 0;}
+  nCount++;
+  
+  if (nCount % 15 === 0){
+  fourNoise.splice(nCount2, 1, noise2);
+  }
+}
+
+function breathType(init, peak, time){
+  this.init = init;
+  this.peak = peak;
+  this.time = time;
+}
+
+function printList(portList) {
+ // portList is an array of serial port names
+ for (var i = 0; i < portList.length; i++) {
+ // Display the list the console:
+ println(i + " " + portList[i]);
+ }
+}
+ 
+function serverConnected() {
+ println('connected to server.');
+}
+ 
+function portOpen() {
+ println('the serial port opened.')
+}
+ 
+function serialError(err) {
+ println('Something went wrong with the serial port. ' + err);
+}
+ 
+function portClose() {
+ println('The serial port closed.');
+}
+
+function serialEvent() {
+  // read a string from the serial port
+  // until you get carriage return and newline:
+  var inString = serial.readStringUntil('\r\n');
+  //check to see that there's actually a string there:
+  if (inString.length > 0) {
+    if (inString !== 'hello') {           // if you get hello, ignore it
+      var sensors = split(inString, ','); // split the string on the commas
+      dataX = abs(sensors[0]);
+      dataY = abs(sensors[1]);
+      dataZ = abs(sensors[2]);
+      dataP = abs(sensors[3]);
+      dataFSR = abs(sensors[4]);
+      
+      console.log(dataX + ", " + dataY + ", " + dataZ + ", " + dataP + ", " + dataFSR + ", " + bAct + ", " + bMin + ", " + bMax + ", " + rCheck);
+    }
+    serial.write('x'); // send a byte requesting more serial data 
+  }
+}
