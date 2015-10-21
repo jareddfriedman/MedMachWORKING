@@ -1,0 +1,675 @@
+var serial;       
+var portName = 'COM3'; 
+var dataX = 0;
+var dataY = 0;
+var dataZ = 0;
+var dataP = 0;
+var dataFSR = 0;
+
+var realY = 0;
+var realX = 0;
+
+var fourNoise = [0, 0, 0, 0];
+
+var noise1 = 125; // alpha for shape 1
+var noise2 = 0; // noise for shape of shape 1
+
+var shapeState = 1
+;
+
+var nCount = 0;
+var nCount2 = 0;
+
+var bMin = 20000; //breath incorporates only Z axis data now - mess with numbers to change, obvs.
+var bMax = 0;
+var bDiff = 0;
+
+var bAct = 0;
+
+var r1 = 0;
+var r2 = 0;
+var r1plus = 0;
+
+var breathCheck = [];
+
+var br; // mapped value for shape size
+var br5 = [];
+var newBr;
+var bRef;
+
+var bt = 0;
+var updown = 1;
+
+var fb = 0;
+var fbn = 1;
+
+var bCount;
+
+var test1;
+
+var rCheck = 0;
+
+var bHue = 0;
+var bSat = 0;
+var bBri = 0;
+
+var breaths = [];
+
+var bTemp = [];
+
+var inhCount = 0; //determines the length of an inhale
+var exhCount = 0; //determines length of exhale
+var brCount = 0; //determines time between breaths to tell if user is breathing
+
+var breathing = true;
+
+var dead = [12, 9, 6, 3];
+
+var lsc = 0;
+var dsc = 0;
+var dsn = 0;
+
+var r1o = 0;
+var bro = 0;
+var pno = 0;
+
+var stateTimer = 0;
+
+var expo = true;
+
+var satNum = 0;
+var satRot = 0;
+var satRot2 = 0;
+
+var brConf = 1;
+
+var drops = [];
+
+var bgLayers = [];
+
+var dt = 0;
+
+ 
+function setup() {
+ createCanvas(1000, 650);          // make canvas
+ smooth();                        // antialias drawing lines
+ serial = new p5.SerialPort();    // make a new instance of the serialport library
+ serial.on('list', printList);    // set a callback function for the serialport list event
+ serial.on('connected', serverConnected); // callback for connecting to the server
+ serial.on('open', portOpen);     // callback for the port opening
+ serial.on('data', serialEvent);  // callback for when new data arrives
+ serial.on('error', serialError); // callback for errors
+ serial.on('close', portClose);   // callback for the port closing
+ 
+ serial.list();                   // list the serial ports
+ serial.open(portName);           // open a serial port
+
+ 
+ 
+}
+function draw() {
+  if (breathing) {
+  bVals();
+  
+  var bAlpha = constrain(map(brConf, 0, 20, 0, 255), 0, 255);
+  
+  background(125);
+  
+  /*push();
+  colorMode(HSB, 360, 100, 100, 255);
+  background(bHue, bSat, bBri, bAlpha);
+  pop();*/
+  
+  runDance();
+  
+  runShapes();
+  
+  }
+  
+  else {
+    background(125);
+    fill(62);
+    translate (width/2, height/2);
+    quad (-100 - dead[0], -100 - dead[0], 100 + dead[1], -100 - dead[1], 100 + dead[2], 100 + dead[2], -100 - dead[3], 100 + dead[3]);
+    for (var i = 0; i < 4; i++) {
+      if (dead[i] <= 0) {
+        dead[i] = 12;
+      }
+      dead[i]-= .05;
+    }
+    
+  if (dataZ < bMin - (bMin/20) || dataZ > bMax + (bMax/20)) {
+    brConf = 1;
+    breathing = true;
+  }
+  }
+  
+    if (expo) {
+    push();
+    colorMode(RGB, 255, 255, 255, 255);
+    fill(150, 43, 89);
+    rect(0, 0, width, height);
+    fill(210, 232, 253);
+    textSize(36);
+    textAlign(CENTER);
+    text("hello there!\n\nthis is a mystery machine.\n\nwhen you're ready, put on the necklace, pick\nup the controller and click the mouse.\n\ni suggest you hold the controller in your lap\nwith the x facing you, but it's\nentirely up to you.", width/2, height/5);
+  }
+}
+
+function runShapes() {
+  
+  longSqueezeCheck();
+
+  if (shapeState == 1) {
+    
+    stateTimer++;
+    
+    doubleSqueezeCheck();
+    
+    drawOneShape(width/2, height/2);
+  
+  }
+  
+  if (shapeState == 2) {
+    
+    doubleSqueezeCheck();
+    
+    stateTimer++;
+    
+    drawTwoShapes(width/2, height/2);
+  
+  }
+
+  
+}
+
+function drawOneShape(x1x, y1y) {
+  
+  var pq = 0;
+  if (dataP > 50) {pq = 50;}
+  else {pq = dataP;}
+  
+  noise1 = map(pq, 0, 50, 125, 225);
+  
+  breathTime();
+    
+  breathWork();
+  
+  getNoise2();
+ 
+  getr1();
+  
+  push();
+  
+  br5.push(bAct);
+  
+  if (br5.length >= 4){
+    br5.splice(0, 1);
+  }
+  
+  var brTot = 0;
+  
+  for (var i = 0; i < br5.length; i++) {
+    brTot += br5[i];
+  }
+  
+  bAct = int(brTot / 3);
+  
+  br = int(constrain(map(bAct, bMin, bMax, 75, 125), 75, 125));
+  if (bDiff < bMax / 20) {br = 100;}
+  
+  fill(255, 255, 255, noise1);
+  noStroke();
+  translate(x1x, y1y);
+  rotate(r1);
+  
+  quad(-br - fourNoise[0], -br - fourNoise[0], br + fourNoise[1], -br - fourNoise[1], br + fourNoise[2], br + fourNoise[2], -br - fourNoise[3], br + fourNoise[3]);
+  
+  push();
+  
+  rotate(satRot);
+  satRot+=(satNum/10);
+  
+  angleMode(DEGREES);
+  
+  fill(200, 0, 0);
+  noStroke();
+  for (var s = 0; s<satNum; s++) {
+    ellipse((sin((360/satNum) * s)*200), (cos((360/satNum) * s)*200), 25, 25);
+  }
+
+  pop();
+  pop();
+}
+
+function drawTwoShapes(x1x, y1y) {
+  
+  var pq = 0;
+  if (dataP > 50) {pq = 50;}
+  else {pq = dataP;}
+  
+  noise1 = map(pq, 0, 50, 125, 225);
+  
+  breathTime();
+    
+  breathWork();
+  
+  getNoise2();
+ 
+  getr1();
+
+  
+  br5.push(bAct);
+  
+  if (br5.length >= 4){
+    br5.splice(0, 1);
+  }
+  
+  var brTot = 0;
+  
+  for (var i = 0; i < br5.length; i++) {
+    brTot += br5[i];
+  }
+  
+  bAct = int(brTot / 3);
+  
+  br = int(constrain(map(bAct, bMin, bMax, 75, 125), 75, 125));
+  if (bDiff < bMax / 20) {br = 100;}
+  
+  push();
+  push();
+  
+  translate((x1x + x1x/2), y1y)
+  rotate(satRot);
+  satRot+=(satNum/10);
+  
+  angleMode(DEGREES);
+  
+  fill(200, 0, 0);
+  noStroke();
+  for (var s = 0; s<satNum; s++) {
+    ellipse((sin((360/satNum) * s)*200), (cos((360/satNum) * s)*200), 25, 25);
+  }
+
+  pop();
+  fill(255, 255, 255, noise1);
+  noStroke();
+  translate((x1x + x1x/2), y1y);
+  rotate(r1);
+  
+  quad(-br - fourNoise[0], -br - fourNoise[0], br + fourNoise[1], -br - fourNoise[1], br + fourNoise[2], br + fourNoise[2], -br - fourNoise[3], br + fourNoise[3]);
+  pop();
+  
+  push();
+  
+  translate((x1x - x1x/2), y1y)
+  rotate(satRot2);
+  satRot2-=(satNum/10);
+  
+  angleMode(DEGREES);
+  
+  fill(200, 0, 0);
+  noStroke();
+  for (var s2 = 0; s2<satNum; s2++) {
+    ellipse((sin((360/satNum) * s2)*200), (cos((360/satNum) * s2)*200), 25, 25);
+  }
+
+  pop();
+  
+  push();
+  fill(255, 255, 255, pno);
+  noStroke();
+  translate((x1x - x1x/2), y1y);
+  rotate(-r1);
+  
+  quad(-bro, -bro, bro, -bro, bro, bro, -bro, bro);
+  pop();
+  
+}
+
+function getr1() {
+rCheck = 0;
+  if (dataFSR < 400) {rCheck = 0;}
+  else if (dataFSR > 800) {rCheck = 800;}
+  else {rCheck = dataFSR;} 
+  
+  if (r1 < TWO_PI) {
+    r1 += map(rCheck, 0, 800, 0, .01);
+  } else {
+    if (rCheck < 100) {r1plus = .005;}
+    r1plus += map(rCheck, 0, 800, 0, .005);
+    r1 += r1plus;
+    
+  }
+}
+
+function breathWork() {
+
+ if(bMin != 20000){
+  bDiff = constrain(bMax - bMin, 0, 2000);}
+  
+  if(bMin === 0) {
+    bMin = bAct;
+  }
+  
+  bAct = dataZ;
+  
+  var bPct = bDiff / 50;
+  
+  breathCheck.push(bAct);
+  
+  if (breathCheck.length >= 100){
+    breathCheck.splice(0, 1);
+  }
+/*for (var i = 0; i < breathCheck.length; i++) {
+  if (breathCheck[i] < bMin + bPct) {
+    bMin = breathCheck[i];
+    bCount = 0;
+  }
+  if (breathCheck[i] > bMax - bPct) {
+    bMax = breathCheck[i];
+    bCount = 0;
+  }
+}
+
+if (bCount >= 180) {
+
+  bMin = bTemp[0];
+  bMax = bTemp[bTemp.length - 1];
+  bCount = 0;
+}
+
+  bCount++;*/
+}
+
+function breathTime() {
+  if (bAct < bMin) {bMin = bAct;}
+  if (bAct > bMax) {bMax = bAct;}
+  
+  if (updown === 0) {exhCount++;}
+  if (updown === 1) {inhCount++;}
+  
+  if (bAct < bMin + (bDiff / 10) && updown === 0) {
+    bMin = bAct;
+    breaths.push(new breathType(bMax, bMin, exhCount, 0));
+    exhCount = 0;
+    if (bDiff > bMin / 10) {
+      brCount = 0;
+      brConf++;
+    }
+    updown = 1;
+  }
+  
+  if (bAct > bMax - (bDiff / 10) && updown === 1) {
+    bMax = bAct;
+    breaths.push(new breathType(bMax, bMin, inhCount, 1));
+    inhCount = 0;
+    if (bDiff > bMax / 10) {
+      brCount = 0;
+      brConf++;
+    }
+    updown = 0;
+   
+  }
+  
+  if (breaths.length >= 100) {
+    breaths.splice(0, 1);
+  }
+  
+  if (exhCount >= 180) {
+    bTemp = sort(breathCheck);
+    bMin = bTemp[0];
+    exhCount = 0;
+    brConf-=0.25;
+  }
+  
+  if (inhCount >= 180) {
+    bTemp = sort(breathCheck);
+    bMax = bTemp[bTemp.length - 1];
+    inhCount = 0;
+    brCount ++;
+    brConf-=0.25;
+  }
+  if (bDiff < bMin / 10 && dataFSR <= 10) {brConf -= .25;}
+  if (dataFSR > 100) {brCount = 0;}
+  if (brConf < 0) {breathing = false;}
+  //if (brCount >= 4 && bDiff < bMin / 20) {breathing = false;}
+}
+
+function fakeBreath() {
+  fb += fbn;
+  if (fb >= 30 || fb <= 0) {
+    fbn = fbn * -1;
+  }
+}
+
+function getNoise2() {
+  var pp = 0;
+  if (dataP > 50) {
+    pp = 50;
+  } else {pp = dataP;}
+  
+  var noise2 = map(pp, 0, 50, 0, 15);
+  
+  if (nCount >= 8) {
+    nCount = 0;
+    nCount2++;
+  }
+  
+  if (nCount === 0){
+  fourNoise.splice(nCount2, 1, noise2);
+  }
+  
+  if (nCount2 >= 3) {
+    nCount2 = 0;
+  }
+  
+    nCount++;
+}
+
+function bVals() {
+  bHue = constrain(map(realX, -800, 800, 0, 360), 0, 360);
+  bSat = constrain(map(realY, 0, 600, 0, 100), 0, 100);
+  bBri = constrain(map(realY, 0, 600, 50, 100), 50, 100);
+}
+
+function bgType(bghue, bgalpha) {
+  this.bghue = bghue;
+  this.bgalpha = bgalpha;
+  
+  this.display = function() {
+  push();
+  colorMode(HSB, 360, 100, 100, 255);
+  fill(this.bghue, 100, 100, this.bgalpha);
+  rect (0, 0, width, height);
+  pop();
+   
+  }
+}
+
+function breathType(init, peak, time, type){
+  this.init = init;
+  this.peak = peak;
+  this.time = time;
+  this.type = type;
+}
+
+function longSqueezeCheck() {
+  if (dataFSR > 800) {
+    lsc++;
+  } 
+  
+  if (dataFSR < 800) {
+    lsc = 0;
+  }
+  
+  if (lsc >= 180 && stateTimer >= 600) {
+    stateChange();
+  }
+}
+
+function doubleSqueezeCheck() {
+  dsc++;
+  if (dataFSR >= 800 && dsn < 1) {
+    dsn++;
+    dsc = 0;
+   }
+   
+   if (dataFSR < 600 && dsn == 1 && dsc < 30) {
+     dsn++;
+   }
+   
+   if (dataFSR >= 800 && dsn == 2 && dsc <= 40) {
+    dsn = 0;
+     satNum++;
+     dsc = -10;
+   }
+   
+    if (dataFSR >= 800 && dsn > 0 && dsc > 40) {
+    dsn = 0;
+    dsc = -20;
+   }
+   
+   if (satNum !== 0 && dsc > (600 / (satNum +1))) {
+     satNum--;
+     dsc = 0;
+   }
+   
+   if (dsc > 601) {
+     dsn = 0;
+     dsc = 0;
+   }
+}
+
+function runDance() {
+  
+  bgLayers.push(new bgType(bHue, int(brConf)));
+  
+  for (var b = 0; b < bgLayers.length; b ++) {
+    bgLayers[b].display();
+  }
+  
+  if (bgLayers.length >= 20) {
+    bgLayers.splice(0, 1);
+  }
+  
+  if (brConf > 6 && brConf < 20 && bAct > bMax) {
+    for (var e = 0; e < int(breaths.length / 5); e ++) {
+      drops.push(new droplet(random(width), random(height), 30));
+    }
+  }
+  
+  if (brConf >= 20) {
+      if (dt > 30) {dt = 0;}
+      drops.push(new droplet(((width/30) * dt), map (bAct, bMin, bMax, 550, 100), 30));
+      dt++;
+  }
+  
+  if (brConf < 20) {
+  for (var d = 0; d < drops.length; d++) {
+    drops[d].display();
+    drops[d].timeout--;
+  }
+  }
+  
+  if (brConf >= 20) {
+    for (var d = 0; d < drops.length; d++) {
+    drops[d].display();
+    drops[d].timeout -= 3;
+  }
+  }
+
+  
+  if (drops.length > 90) {
+    drops.splice(0, (drops.length - 90));
+  }
+}
+
+function droplet(x, y, diameter) {
+  this.x = x;
+  this.y = y;
+  this.diameter = diameter;
+  this.timeout = 255;
+  
+  this.display = function() {
+    fill(255, 255, 255, this.timeout);
+    noStroke();
+    ellipse(this.x, this.y, this.diameter, this.diameter);
+  }
+}
+
+function stateChange() {
+  if (shapeState == 1) {
+    r1o = r1;
+    bro = br;
+    pno = noise1;
+    stateTimer = 0;
+    satNum = 0;
+    dsn = 0;
+    shapeState = 2;
+    drops.length = 0;
+  }
+  
+    if (shapeState == 2) {
+    stateTimer = 0;
+    satNum = 0;
+    dsn = 0;
+    shapeState = 1;
+    drops.length = 0;
+  }
+}
+
+function printList(portList) {
+ // portList is an array of serial port names
+ for (var i = 0; i < portList.length; i++) {
+ // Display the list the console:
+ println(i + " " + portList[i]);
+ }
+}
+ 
+function serverConnected() {
+ println('connected to server.');
+}
+ 
+function portOpen() {
+ println('the serial port opened.')
+}
+ 
+function serialError(err) {
+ println('Something went wrong with the serial port. ' + err);
+}
+ 
+function portClose() {
+ println('The serial port closed.');
+}
+
+function serialEvent() {
+  // read a string from the serial port
+  // until you get carriage return and newline:
+  var inString = serial.readStringUntil('\r\n');
+  //check to see that there's actually a string there:
+  if (inString.length > 0) {
+    if (inString !== 'hello') {           // if you get hello, ignore it
+      var sensors = split(inString, ','); // split the string on the commas
+      dataX = abs(sensors[0]);
+      dataY = abs(sensors[1]);
+      dataZ = abs(sensors[2]);
+      dataP = (sensors[3]);
+      dataFSR = (sensors[4]);
+      realX = sensors[0];
+      realY = sensors[1];
+      
+     //console.log(realX);
+      console.log(bAct + ", " + dataFSR + ", " + dsc + ", " + dsn + ", " + updown + ", " + exhCount + ", " + inhCount + ", " + drops.length + ", " + brConf + ", " + satNum); 
+      //bTemp[0] + ", " + bTemp[bTemp.length - 1] + ", " + bTemp.length);
+     //console.log(dataX + ", " + dataY + ", " + dataZ + ", " + dataP + ", " + dataFSR + ", " + bAct + ", " + bMin + ", " + bMax + ", " + r1 + ", " + realX + ", " + realY);
+    }
+    serial.write('x'); // send a byte requesting more serial data 
+  }
+}
+
+function mousePressed() {
+if (expo === true) {
+  expo = false;
+}
+}
